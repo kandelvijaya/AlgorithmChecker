@@ -167,11 +167,11 @@ public struct AlgorithmChecker {
         }
 
         public func input<T>() -> T where T: Randomizabel {
-            return T.random
+            return T.random()
         }
 
         public func input<T>() -> T where T: Collection, T.Element: Randomizabel {
-            let arr = Array<T.Element>(repeating: T.Element.random, count: currentSize)
+            let arr = Array<T.Element>(repeating: T.Element.random(), count: currentSize)
             return arr.random as! T
         }
 

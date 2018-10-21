@@ -27,6 +27,17 @@ final class AlgoCheckerTests: XCTestCase {
         // TODO:-
     }
 
+    func test_whenRandomCollectionIsAsked_itIsRandom() {
+        let tp = [AlgorithmChecker.ComputeTimePoint(size: 2, computeTime: 0.04), AlgorithmChecker.ComputeTimePoint(size:4, computeTime:0.02) ]
+
+        let sizeState = AlgorithmChecker.SizeState(timePoints: tp)
+        let inputP = AlgorithmChecker.InputProvider(state: sizeState)
+        let randomIntCollectionInput: [Int] = inputP?.input() ?? []
+        XCTAssert(randomIntCollectionInput.count >= 4)
+        // Sanity check
+        XCTAssertNotEqual(randomIntCollectionInput.first, randomIntCollectionInput.last)
+    }
+
     static var allTests = [
         ("testExample", testExample),
     ]
