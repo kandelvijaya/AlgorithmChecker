@@ -10,9 +10,9 @@ import QuartzCore
 /// with some tolerance to offset system fluctuation.
 ///
 /// There might be some false positive. This is WIP.
-struct AlgorithmChecker {
+public struct AlgorithmChecker {
 
-    enum TimeComplexity {
+    public enum TimeComplexity {
         case linear
         case logarithmic
         case quadratic
@@ -29,7 +29,7 @@ struct AlgorithmChecker {
 
     }
 
-    enum Tolerance {
+    public enum Tolerance {
         /// ±1%
         case none
 
@@ -153,7 +153,7 @@ struct AlgorithmChecker {
 
 
     /// Randomized data source to feed into algorithm input
-    struct InputProvider {
+    public struct InputProvider {
 
         let currentSize: Int
 
@@ -164,11 +164,11 @@ struct AlgorithmChecker {
             self.currentSize = size
         }
 
-        func input<T>() -> T where T: Randomizabel {
+        public func input<T>() -> T where T: Randomizabel {
             return T.random
         }
 
-        func input<T>() -> T where T: Collection, T.Element: Randomizabel {
+        public func input<T>() -> T where T: Collection, T.Element: Randomizabel {
             let arr = Array<T.Element>(repeating: T.Element.random, count: currentSize)
             return arr.random as! T
         }
@@ -180,8 +180,8 @@ struct AlgorithmChecker {
     /// 1. The algorithm can use provided InputProvider to get the input.
     /// 2. The algorithm must call into the completion block supplied with the result.
     /// 3. `U` is the type of result the algorithm produces.
-    struct Operation<U> {
-        var fnBlock: (InputProvider, (U) -> Void) -> Void
+    public struct Operation<U> {
+        public var fnBlock: (InputProvider, (U) -> Void) -> Void
     }
 
     /// Detects if a provided algorithm has given complexity.
@@ -193,7 +193,7 @@ struct AlgorithmChecker {
     /// - Returns: Bool
     /// - Throws: Can thorw if the promise was already executed. Can throw if the algorithm doesnot
     ///           support Randomized input.
-    mutating func assert<T>(algorithm: Operation<T>, has expectedComplexity: TimeComplexity, tolerance: Tolerance = .none) -> Bool {
+    public mutating func assert<T>(algorithm: Operation<T>, has expectedComplexity: TimeComplexity, tolerance: Tolerance = .none) -> Bool {
 
         // Storage of the samples collected
         var timeKeeper: SizeState = SizeState()
