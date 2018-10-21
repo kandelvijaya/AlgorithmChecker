@@ -2,40 +2,14 @@ import Foundation
 import QuartzCore
 
 
-/// Provide a way to generate random elements in evey single call.
-protocol Randomizabel {
-    static var random: Self { get }
-}
-
-
-func random<T>() -> T where T: Randomizabel{
-    return T.random
-}
-
-
-extension Int: Randomizabel {
-    /// how would one reduce with + to another Int if the random range is from
-    /// Int.min to Int.max
-    static var random: Int =  Int.random(in: -1000..<1000)
-}
-
-
-extension Array where Element: Randomizabel {
-    var random: Array<Element> {
-        get {
-            return self.map { _ in Element.random }
-        }
-    }
-}
-
-
 /// Given a algorithm encapsulated in Operation, asserts weather the time
 /// complexity of the algorithm matches the expected one.
 ///
 /// This one doesnot parse the code and analyse. However, it runs the algorithm
 /// feeding various sized of random input and then analyse the time/size graph
 /// with some tolerance to offset system fluctuation.
-/// There might be some false positive
+///
+/// There might be some false positive. This is WIP.
 struct AlgorithmChecker {
 
     enum TimeComplexity {
@@ -43,6 +17,16 @@ struct AlgorithmChecker {
         case logarithmic
         case quadratic
         case polynomial
+    }
+
+    typealias Second = Double
+    typealias SampleSize = Int
+
+    struct ComputeTimePoint {
+
+        let size: SampleSize
+        let computeTime: Second  // expressed in seconds
+
     }
 
     enum Tolerance {
@@ -62,11 +46,11 @@ struct AlgorithmChecker {
     /// by calling `incrementSize()`. This acts like a UniDirectionalIterator.
     /// When the currentSize cannot be incremented then it terminates with nil.
     ///
-    /// Further consideration:
+    /// Consideration:
     /// It doesnot make sense to provide same sample size for all algorithms.
     /// Especially if the algorithm is quadratic or polynomial then we can provide
     /// sample size that won't freeze the computer for days. To do such, we can
-    /// accumulate result and analyse them and then provide input.
+    /// accumulate result and analyse them and then provide next usable input size.
     struct SizeState {
 
         var timePoints: [ComputeTimePoint] = []
@@ -83,11 +67,12 @@ struct AlgorithmChecker {
             return ComputeTimePointAnalyzer().analyseComplexity(from: timePoints, with: .medium)
         }
 
-        /// Calculates what would be the next best usable size
+        /// Calculates what would be the next best usable input size
         /// considering it should be substantial leap from current and
         /// it should not hang the computer comupting it. (quadratic & polynomial
         /// algorithm usually suffer from this one)
-        /// TODO:- Dont exceed 60 seconds on the next computation for not linear and not logarithmic
+        ///
+        /// NOTE:- If the last compute time was more than 10 seconds then don't proceed
         private func nextUsableSize(when previousTimePoints: [ComputeTimePoint]) -> SampleSize? {
             let possibleComplexity = currentComplexity
             let lastPoint = previousTimePoints.sorted { $0.size < $1.size }.last
@@ -116,35 +101,21 @@ struct AlgorithmChecker {
             } else {
                 return possibleNextSize
             }
-
         }
 
     }
 
-    typealias Second = Double
-    typealias SampleSize = Int
-
-    struct ComputeTimePoint {
-
-        let size: SampleSize
-        let computeTime: Second  // expressed in seconds
-
-    }
-
-
-//    func graph(timePoints: [ComputeTimePoint]) -> CGImage {
-//
-//    }
 
     struct ComputeTimePointAnalyzer {
 
         /// Returns time complexity of the algorithm based on sample data and tolerance
         ///
         /// - Parameters:
-        ///   - sample: [InputSampleSize: TimeInterval]
+        ///   - sample: [ComputeTimePoint]
         ///   - tolerance: Tolerance to apply such that the system process affect can be negated
         /// - Returns: TimeComplexity
-        /// TODO:- use a graph checking algorithm here
+        /// TODO:- use a graph checking algorithm here.
+        /// TODO:- Plot graph and feed into coreml model to detect. Investigate
         func analyseComplexity(from sample: [ComputeTimePoint], with tolerance: Tolerance) -> TimeComplexity {
             guard sample.count >= 2 else { return .linear }
 
@@ -161,7 +132,8 @@ struct AlgorithmChecker {
                 return .linear
             }
 
-            // TODO:- fix this
+            // TODO:- At this moment, we can only check for linear complexity.
+            // TODO:- Add support for more.
             return .polynomial
         }
 
@@ -181,8 +153,6 @@ struct AlgorithmChecker {
 
 
     /// Randomized data source to feed into algorithm input
-    /// To get incremental size of randomized inputs, consider calling
-    /// `next()` which internally uses a different size based on SizeInput.
     struct InputProvider {
 
         let currentSize: Int
@@ -213,20 +183,6 @@ struct AlgorithmChecker {
     struct Operation<U> {
         var fnBlock: (InputProvider, (U) -> Void) -> Void
     }
-
-    struct AlgorithmIdentifier {
-        let id: Int
-        let size: Int // SampleSize
-    }
-
-
-    /// Intended to use when algorithm can have concurrent/parallel or
-    /// do its work on background thread.
-    struct _OperationWrapper<U> {
-        let storage: Operation<U>
-        let identifier: AlgorithmIdentifier
-    }
-
 
     /// Detects if a provided algorithm has given complexity.
     ///
