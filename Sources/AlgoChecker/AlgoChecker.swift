@@ -12,6 +12,8 @@ import QuartzCore
 /// There might be some false positive. This is WIP.
 public struct AlgorithmChecker {
 
+    public init() {}
+
     public enum TimeComplexity {
         case linear
         case logarithmic
