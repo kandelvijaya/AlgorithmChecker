@@ -69,24 +69,113 @@ struct AlgorithmChecker {
     /// accumulate result and analyse them and then provide input.
     struct SizeState {
 
-        private var sampleSizes: [Int] {
-            return type(of: self).sampleSizes
+        var timePoints: [ComputeTimePoint] = []
+
+        mutating func addTimePoint(_ newTimePoint: ComputeTimePoint) {
+            timePoints.append(newTimePoint)
         }
 
-        private var currentIndex = 0
-
-        mutating func incrementSize() {
-            currentIndex += 1
+        func currentInputSize() -> Int? {
+            return nextUsableSize(when: timePoints)
         }
 
-        func currentSize() -> Int? {
-            guard currentIndex < sampleSizes.count else { return nil }
-            return sampleSizes[currentIndex]
+        var currentComplexity: TimeComplexity {
+            return ComputeTimePointAnalyzer().analyseComplexity(from: timePoints, with: .medium)
         }
 
-        static var sampleSizes: [Int] {
-            return [10, 100, 1000, 10000]
+        /// Calculates what would be the next best usable size
+        /// considering it should be substantial leap from current and
+        /// it should not hang the computer comupting it. (quadratic & polynomial
+        /// algorithm usually suffer from this one)
+        /// TODO:- Dont exceed 60 seconds on the next computation for not linear and not logarithmic
+        private func nextUsableSize(when previousTimePoints: [ComputeTimePoint]) -> SampleSize? {
+            let possibleComplexity = currentComplexity
+            let lastPoint = previousTimePoints.sorted { $0.size < $1.size }.last
+            let lastSampleSize = lastPoint?.size ?? 2
+            var possibleNextSize: SampleSize
+
+            switch possibleComplexity {
+            case .linear:
+                //1. Check if we have used enough data sets
+                if previousTimePoints.count > 512 { return nil }
+                possibleNextSize = lastSampleSize ^ 2
+            case .logarithmic:
+                // return nlogn or a bit less
+                if previousTimePoints.count > 512 { return nil }
+                possibleNextSize = lastSampleSize * 2
+            case .quadratic:
+                // return a point which would not blow up processing
+                possibleNextSize = lastSampleSize * 2
+            case .polynomial:
+                // return a point which would not blow up processing
+                possibleNextSize = lastSampleSize * 2
+            }
+
+            if (lastPoint?.computeTime ?? 0) >= 10.0 {
+                return nil
+            } else {
+                return possibleNextSize
+            }
+
         }
+
+    }
+
+    typealias Second = Double
+    typealias SampleSize = Int
+
+    struct ComputeTimePoint {
+
+        let size: SampleSize
+        let computeTime: Second  // expressed in seconds
+
+    }
+
+
+//    func graph(timePoints: [ComputeTimePoint]) -> CGImage {
+//
+//    }
+
+    struct ComputeTimePointAnalyzer {
+
+        /// Returns time complexity of the algorithm based on sample data and tolerance
+        ///
+        /// - Parameters:
+        ///   - sample: [InputSampleSize: TimeInterval]
+        ///   - tolerance: Tolerance to apply such that the system process affect can be negated
+        /// - Returns: TimeComplexity
+        /// TODO:- use a graph checking algorithm here
+        func analyseComplexity(from sample: [ComputeTimePoint], with tolerance: Tolerance) -> TimeComplexity {
+            guard sample.count >= 2 else { return .linear }
+
+            let amplifier: Double = 1000
+            let tangents = sample.map {($0.size, ($0.computeTime * amplifier) / Double($0.size)) }.sorted { $0.0 < $1.0 } // time/size
+
+            Swift.assert(tangents.count >= 2, "There are no enough data points to analyse")
+
+            let last = tangents.last!
+            let secondLast = tangents.dropLast().last!
+
+            let chekInRange = toleratedRange(from: last.1, with: tolerance)
+            if chekInRange.contains(secondLast.1) {
+                return .linear
+            }
+
+            // TODO:- fix this
+            return .polynomial
+        }
+
+        private func toleratedRange(from value: Second, with tolerance: Tolerance) -> Range<Second> {
+            switch tolerance {
+            case .none:
+                return Range<Second>(uncheckedBounds: (lower: value * 0.99, upper: value * 1.01))
+            case .low:
+                return Range<Second>(uncheckedBounds: (lower: value * 0.9, upper: value * 1.1))
+            case .medium:
+                return Range<Second>(uncheckedBounds: (lower: value * 0.75, upper: value * 1.25))
+            }
+        }
+
 
     }
 
@@ -96,14 +185,12 @@ struct AlgorithmChecker {
     /// `next()` which internally uses a different size based on SizeInput.
     struct InputProvider {
 
-        private var sizeState: SizeState
         let currentSize: Int
 
         init?(state: SizeState) {
-            guard let size = state.currentSize() else {
+            guard let size = state.currentInputSize() else {
                 return nil
             }
-            self.sizeState = state
             self.currentSize = size
         }
 
@@ -114,11 +201,6 @@ struct AlgorithmChecker {
         func input<T>() -> T where T: Collection, T.Element: Randomizabel {
             let arr = Array<T.Element>(repeating: T.Element.random, count: currentSize)
             return arr.random as! T
-        }
-
-        mutating func next() -> InputProvider? {
-            self.sizeState.incrementSize()
-            return InputProvider(state: self.sizeState)
         }
 
     }
@@ -158,56 +240,21 @@ struct AlgorithmChecker {
     mutating func assert<T>(algorithm: Operation<T>, has expectedComplexity: TimeComplexity, tolerance: Tolerance = .none) -> Bool {
 
         // Storage of the samples collected
-        var timeKeeper: [Int: TimeInterval] = [:]
+        var timeKeeper: SizeState = SizeState()
 
-        /// TODO:- InputProvider can be a `Iterator`.
-        var ip = InputProvider(state: SizeState())
+        var ip = InputProvider(state: timeKeeper)
         while ip != nil {
             let startTime = CACurrentMediaTime()
+            let executingSize = ip!.currentSize
             algorithm.fnBlock(ip!) { result in
                 let stopTime = CACurrentMediaTime()
-                timeKeeper[ip!.currentSize] = stopTime - startTime
+                let timePoint = ComputeTimePoint(size: executingSize, computeTime: stopTime - startTime)
+                timeKeeper.addTimePoint(timePoint)
             }
-            ip = ip?.next()
+            ip = InputProvider(state: timeKeeper)
         }
 
-        return analyseComplexity(from: timeKeeper, with: tolerance) == expectedComplexity
-    }
-
-
-    /// Returns time complexity of the algorithm based on sample data and tolerance
-    ///
-    /// - Parameters:
-    ///   - sample: [InputSampleSize: TimeInterval]
-    ///   - tolerance: Tolerance to apply such that the system process affect can be negated
-    /// - Returns: TimeComplexity
-    private mutating func analyseComplexity(from sample: [Int: TimeInterval], with tolerance: Tolerance) -> TimeComplexity {
-        let amplifier: Double = 1000
-        let tangents = sample.map { ($0.0, ($0.1 * amplifier) / Double($0.0)) }.sorted { $0.0 < $1.0 } // time/size
-
-        Swift.assert(tangents.count > 2, "There are no enough data points to analyse")
-
-        let last = tangents.last!
-        let secondLast = tangents.dropLast().last!
-
-        let chekInRange = toleratedRange(from: last.1, with: tolerance)
-        if chekInRange.contains(secondLast.1) {
-            return .linear
-        }
-
-        // TODO:- fix this
-        return .polynomial
-    }
-
-    private func toleratedRange(from value: Double, with tolerance: Tolerance) -> Range<Double> {
-        switch tolerance {
-        case .none:
-            return Range<Double>(uncheckedBounds: (lower: value * 0.99, upper: value * 1.01))
-        case .low:
-            return Range<Double>(uncheckedBounds: (lower: value * 0.9, upper: value * 1.1))
-        case .medium:
-            return Range<Double>(uncheckedBounds: (lower: value * 0.75, upper: value * 1.25))
-        }
+        return timeKeeper.currentComplexity == expectedComplexity
     }
 
 }
