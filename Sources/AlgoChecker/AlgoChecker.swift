@@ -85,7 +85,7 @@ public struct AlgorithmChecker {
             case .linear:
                 //1. Check if we have used enough data sets
                 if previousTimePoints.count > 512 { return nil }
-                possibleNextSize = lastSampleSize ^ 2
+                possibleNextSize = lastSampleSize * lastSampleSize
             case .logarithmic:
                 // return nlogn or a bit less
                 if previousTimePoints.count > 512 { return nil }
@@ -98,11 +98,11 @@ public struct AlgorithmChecker {
                 possibleNextSize = lastSampleSize * 2
             }
 
-            if (lastPoint?.computeTime ?? 0) >= 10.0 {
-                return nil
-            } else {
-                return possibleNextSize
-            }
+            let nextSizeTakesMoreThan10Seconds = (lastPoint?.computeTime ?? 0) >= 10.0
+            let nextSizeWillFreezeWhileAllocation = possibleNextSize >= 1000_000
+            let thereIsNoPointReturningNextSize = nextSizeTakesMoreThan10Seconds || nextSizeWillFreezeWhileAllocation
+
+            return thereIsNoPointReturningNextSize ? nil : possibleNextSize
         }
 
     }
