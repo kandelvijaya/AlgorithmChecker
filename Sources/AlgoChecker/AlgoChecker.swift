@@ -181,7 +181,13 @@ public struct AlgorithmChecker {
     /// 2. The algorithm must call into the completion block supplied with the result.
     /// 3. `U` is the type of result the algorithm produces.
     public struct Operation<U> {
-        public var fnBlock: (InputProvider, (U) -> Void) -> Void
+
+        public let fnBlock: (InputProvider, (U) -> Void) -> Void
+
+        public init(_ fnBlock: @escaping (InputProvider, (U) -> Void) -> Void) {
+            self.fnBlock = fnBlock
+        }
+
     }
 
     /// Detects if a provided algorithm has given complexity.
